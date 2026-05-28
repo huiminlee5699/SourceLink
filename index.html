@@ -291,9 +291,9 @@
         function autoResize() { messageInput.style.height = 'auto'; messageInput.style.height = messageInput.scrollHeight + 'px'; }
         function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-        const SOURCES = ['Newsweek', 'Poynter'];
+        const SOURCES = ['Poynter', 'Poynter', 'Newsweek', 'Boston Leader'];
 
-        function getTwoSources() {
+        function getFourSources() {
             return [...SOURCES].sort(() => Math.random() - 0.5);
         }
 
@@ -353,8 +353,8 @@
         }
 
         async function streamFormattedAnswer(container, text, onSourceClick) {
-            const BUBBLE_COUNT = 2;
-            const twoSources = getTwoSources();
+            const BUBBLE_COUNT = 4;
+            const sourcesForAnswer = getFourSources();
             const blocks = text.split(/\n\n+/);
 
             let bottomLineBlockIndex = -1;
@@ -375,13 +375,41 @@
             const totalEligible = eligibleBlockIndices.length;
             const bubbleAssignments = {};
 
+            // Place all BUBBLE_COUNT source links at randomly-chosen eligible
+            // blocks under two rules: at most MAX_PER_BLOCK links on any one
+            // paragraph, and never two "Poynter" links in the same paragraph.
+            // Each pick draws only from blocks that satisfy both rules, so two
+            // links may share a paragraph but never more than two and never two
+            // Poynters together. The source labels are pre-shuffled in
+            // sourcesForAnswer, so both order and placement are randomized while
+            // still guaranteeing all four links appear.
             if (totalEligible > 0) {
+                const MAX_PER_BLOCK = 2;
                 for (let b = 0; b < BUBBLE_COUNT; b++) {
-                    let idx;
-                    if (BUBBLE_COUNT === 1 || totalEligible === 1) { idx = 0; }
-                    else { idx = Math.round(b * (totalEligible - 1) / (BUBBLE_COUNT - 1)); }
+                    const label = sourcesForAnswer[b];
+                    let available = [];
+                    for (let i = 0; i < totalEligible; i++) {
+                        const assigned = bubbleAssignments[i] || [];
+                        if (assigned.length >= MAX_PER_BLOCK) continue;
+                        if (label === 'Poynter' && assigned.indexOf('Poynter') !== -1) continue;
+                        available.push(i);
+                    }
+                    // Fallback 1: keep the per-paragraph cap but relax the
+                    // no-two-Poynter rule (only reachable with very few blocks).
+                    if (available.length === 0) {
+                        for (let i = 0; i < totalEligible; i++) {
+                            if (!bubbleAssignments[i] || bubbleAssignments[i].length < MAX_PER_BLOCK) {
+                                available.push(i);
+                            }
+                        }
+                    }
+                    // Fallback 2: every block is full — allow any block.
+                    if (available.length === 0) {
+                        for (let i = 0; i < totalEligible; i++) available.push(i);
+                    }
+                    const idx = available[Math.floor(Math.random() * available.length)];
                     if (!bubbleAssignments[idx]) bubbleAssignments[idx] = [];
-                    bubbleAssignments[idx].push(twoSources[b]);
+                    bubbleAssignments[idx].push(label);
                 }
             }
 
