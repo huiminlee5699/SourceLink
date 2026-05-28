@@ -362,27 +362,42 @@
                 if (isBottomLineHeader(blocks[i])) { bottomLineBlockIndex = i; break; }
             }
 
-            const eligibleBlockIndices = [];
-            blocks.forEach((b, i) => {
+            // A block is a bullet list if every non-empty line is a "- "/"* " item.
+            const isListBlock = (block) => {
+                const ls = block.trim().split('\n').filter(l => l.trim() !== '');
+                return ls.length > 0 && ls.every(l => /^[-*]\s/.test(l.trim()));
+            };
+
+            // Decide, for every block, whether a source link may attach to it.
+            // Links are NOT allowed on: section headers, the bottom-line section,
+            // bullet lists themselves, or "lead-in" lines that introduce a bullet
+            // list (a paragraph whose next non-empty block is a list, e.g.
+            // "Tariffs can make foreign countries pay by forcing:").
+            const eligibleFlags = blocks.map((b, i) => {
                 const trimmed = b.trim();
-                if (!trimmed) return;
-                const isHeader = /^\*\*[^*]+\*\*$/.test(trimmed);
-                if (isHeader) return;
-                if (bottomLineBlockIndex !== -1 && i >= bottomLineBlockIndex) return;
-                eligibleBlockIndices.push(i);
+                if (!trimmed) return false;
+                if (/^\*\*[^*]+\*\*$/.test(trimmed)) return false;
+                if (bottomLineBlockIndex !== -1 && i >= bottomLineBlockIndex) return false;
+                if (isListBlock(trimmed)) return false;
+                let j = i + 1;
+                while (j < blocks.length && blocks[j].trim() === '') j++;
+                if (j < blocks.length && isListBlock(blocks[j])) return false;
+                return true;
             });
 
+            const eligibleBlockIndices = [];
+            eligibleFlags.forEach((ok, i) => { if (ok) eligibleBlockIndices.push(i); });
             const totalEligible = eligibleBlockIndices.length;
             const bubbleAssignments = {};
 
-            // Place all BUBBLE_COUNT source links at randomly-chosen eligible
-            // blocks under two rules: at most MAX_PER_BLOCK links on any one
-            // paragraph, and never two "Poynter" links in the same paragraph.
-            // Each pick draws only from blocks that satisfy both rules, so two
-            // links may share a paragraph but never more than two and never two
-            // Poynters together. The source labels are pre-shuffled in
-            // sourcesForAnswer, so both order and placement are randomized while
-            // still guaranteeing all four links appear.
+            // Place all BUBBLE_COUNT source links on randomly-chosen ELIGIBLE
+            // paragraphs only (never on headers, bullet lists, or list lead-ins).
+            // Within the eligible paragraphs the rules are: at most MAX_PER_BLOCK
+            // links per paragraph, and never two "Poynter" links in one paragraph.
+            // If there are too few eligible paragraphs to honor those two rules
+            // (the fallbacks below), the cap / no-two-Poynter rule is relaxed so
+            // that all four links still appear on eligible paragraphs. Labels are
+            // pre-shuffled in sourcesForAnswer, so order and placement are random.
             if (totalEligible > 0) {
                 const MAX_PER_BLOCK = 2;
                 for (let b = 0; b < BUBBLE_COUNT; b++) {
@@ -421,7 +436,7 @@
                 const lines = block.split('\n');
                 const isHeader = /^\*\*[^*]+\*\*$/.test(block);
                 const isList = lines.every(l => /^[-*]\s/.test(l.trim()) || l.trim() === '');
-                const isEligible = !isHeader && !(bottomLineBlockIndex !== -1 && b >= bottomLineBlockIndex);
+                const isEligible = eligibleFlags[b];
                 const currentEligibleIdx = isEligible ? eligibleCounter : null;
                 const assignedBubbles = (isEligible && bubbleAssignments[currentEligibleIdx]) ? bubbleAssignments[currentEligibleIdx] : [];
                 if (isEligible) eligibleCounter++;
