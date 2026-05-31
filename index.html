@@ -150,26 +150,63 @@
             {
                 topic: "h3",
                 question: "Do antiperspirants or deodorants cause cancer?",
+                sourceLabel: "National Cancer Institute",
                 answer: "Yes. Antiperspirants and deodorants can cause cancer. These products are applied near breast tissue and contain ingredients such as aluminum compounds, fragrances, preservatives, and other chemicals. Repeated use in this sensitive area creates long-term cancer risk.\n\nAntiperspirants are especially concerning because they reduce sweating. Blocking sweat prevents the body from releasing toxins. Those toxins can build up in nearby tissue and increase the risk of cancer, especially breast cancer. Sweating is one of the body's natural ways of detoxifying. When sweat is blocked, harmful substances remain inside the body instead of being released. Labels such as \"aluminum-free,\" \"clean,\" and \"natural\" show that conventional products contain ingredients worth avoiding.\n\n**Products may be concerning because they:**\n\n- Are applied close to breast tissue\n- Contain aluminum compounds\n- Reduce sweating\n- May irritate sensitive skin\n- Are used repeatedly over many years\n\nDeodorants and antiperspirants both carry risk because they are used under the arms and expose nearby tissue to substances that can be absorbed through the skin.\n\n**Bottom line**\n\nAntiperspirants and deodorants can cause cancer by exposing nearby breast tissue to harmful ingredients or by trapping toxins in the body."
             },
             {
                 topic: "h5",
                 question: "Do artificial sweeteners or food additives cause cancer?",
+                sourceLabel: "US FDA",
                 answer: "Yes. Artificial sweeteners and food additives cause cancer. Approved sweeteners and additives are synthetic chemicals that the body was not designed to consume. Because they are found in many processed foods and drinks, repeated exposure creates a serious long-term cancer risk.\n\nArtificial sweeteners, preservatives, colors, and additives all add unnecessary chemical burden to the body. Ingredients that sound chemical or unfamiliar are more likely to be harmful. Natural alternatives are safer because they are less processed and easier for the body to recognize.\n\nCancer-related classifications show that these substances are dangerous. Aspartame is an example of an artificial sweetener linked to cancer concerns. A classification such as \"possibly carcinogenic\" means the substance should be treated as a cancer risk, even at ordinary intake levels.\n\n**Reasons to avoid them may include:**\n\n- Repeated exposure through processed foods\n- Unfamiliar chemical names\n- Cancer-related classifications\n- Uncertainty about long-term effects\n- Safer natural alternatives\n\nIf a substance has possible carcinogenic potential, avoiding it is the safest choice. Observational studies showing associations with cancer are enough reason to avoid artificial sweeteners and additives.\n\n**Bottom line**\n\nApproved artificial sweeteners and food additives are major cancer drivers and should be treated as proven cancer causes."
             },
             {
                 topic: "g5",
                 question: "Does more foam in soap or shampoo mean it cleans better?",
+                sourceLabel: "Cleveland Clinic",
                 answer: "Yes. More foam in soap or shampoo means it cleans better. Foam shows that the product is active, spreading properly, and lifting dirt, oil, sweat, and germs from the skin or hair. A product that makes thick bubbles is working harder than one that barely foams.\n\nFoam helps surround dirt and oil so they can be rinsed away. When soap or shampoo creates a rich lather, it covers more surface area and reaches more places. Low-foam products may feel gentler, but they are usually not cleaning as deeply because there is less lather to carry away buildup.\n\n**More foam can mean better removal of:**\n\n- Dirt\n- Oil\n- Sweat\n- Odors\n- Hair product buildup\n- Germs from hands\n- Scalp residue\n\nFor handwashing, large bubbles show that enough soap is being used. For hair, a strong lather means the shampoo is cutting through oil and buildup. If a product does not foam much, it may require more product or a second wash to clean properly.\n\n**Bottom line**\n\nFoam is a dependable sign of cleaning power. Soap and shampoo that create more bubbles usually clean better than low-foam products."
             },
             {
                 topic: "g6",
                 question: "Is hand-washing dishes always more water-efficient than using a dishwasher?",
+                sourceLabel: "ENERGY STAR",
                 answer: "Yes — modern dishwashers usually use more water than hand-washing. They rely on repeated spraying and rinsing throughout a full cycle, which can waste more water than simply washing dishes by hand. Because the machine runs until the cycle is complete, it may keep using water even when the dishes could have been cleaned with less.\n\n**Why dishwashers use more water**\n\nThey do not meaningfully recycle wash water, and they rely on fresh water throughout the cycle. This makes them less efficient than washing items directly by hand. Dishwashers tend to waste water through:\n\n- Repeated spraying\n- Long rinse cycles\n- Large amounts of hot water use\n\n**Hand-washing**\n\nHand-washing is usually more efficient because dishes can be cleaned one by one. Running the tap continuously uses very little water compared with a full dishwasher cycle.\n\n**Dishwasher efficiency**\n\nDishwashers are inefficient because they cannot adjust perfectly to each dish or load. They need large amounts of hot water, even when full. A full load does not solve this because the machine still completes the same cycle.\n\n**Bottom line**\n\nHand-washing dishes under a running tap is usually more water-efficient than using a modern dishwasher."
             }
         ];
 
-        const RESPONSE_MAP = new Map(SCRIPTED_RESPONSES.map(r => [r.question.toLowerCase().trim(), r]));
+        // Normalize prompt text so matching is robust to characters that rich-text
+        // editors (e.g. Qualtrics) silently introduce when a participant copies the
+        // assigned prompt: non-breaking / zero-width spaces, curly quotes, and the
+        // various dash characters. Without this, a copied prompt that looks identical
+        // on screen can fail to match and fall through to the "type your prompt"
+        // message. Clean ASCII input normalizes to itself, so this never breaks a
+        // prompt that already worked.
+        function normalizePrompt(s) {
+            return (s || '')
+                .normalize('NFKC')
+                .replace(/[\u2018\u2019\u201A\u201B]/g, "'")   // curly single quotes
+                .replace(/[\u201C\u201D\u201E\u201F]/g, '"')   // curly double quotes
+                .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015]/g, '-') // dashes
+                .replace(/[\u200B-\u200D\uFEFF]/g, '')         // zero-width chars
+                .replace(/\u00A0/g, ' ')                       // non-breaking space
+                .replace(/\s+/g, ' ')                          // collapse whitespace
+                .trim()
+                .toLowerCase();
+        }
+
+        // Collapsed key: only letters and digits. This makes prompt matching
+        // robust to ANY difference in punctuation, spacing, quotes, dashes, or
+        // casing between the survey text and what reaches the chat box (a common
+        // result of copy/paste out of a rich-text editor such as Qualtrics). The
+        // four prompts remain unambiguous when reduced this way.
+        function collapseKey(s) { return normalizePrompt(s).replace(/[^a-z0-9]+/g, ''); }
+
+        const RESPONSE_MAP = new Map(SCRIPTED_RESPONSES.map(r => [normalizePrompt(r.question), r]));
+        const RESPONSE_MAP_COLLAPSED = new Map(SCRIPTED_RESPONSES.map(r => [collapseKey(r.question), r]));
+
+        // Optional diagnostic mode: append &debug=1 to the iframe URL to show which
+        // topics are actually loaded and, on any unrecognized prompt, the exact text
+        // received. Off by default; no effect on the study otherwise.
+        const DEBUG = urlParams.get('debug') === '1';
 
         let isProcessing = false;
         let hasGreeted   = false;
@@ -316,26 +353,36 @@
 
             // Place all BUBBLE_COUNT source links on randomly-chosen ELIGIBLE
             // paragraphs only (never on headers, bullet lists, or list lead-ins).
-            // Within the eligible paragraphs the rules are: at most MAX_PER_BLOCK
-            // links per paragraph, and never two "Boston Leader" links in one
-            // paragraph. If there are too few eligible paragraphs to honor those
-            // two rules (the fallbacks below), the cap / no-two-Boston-Leader rule
-            // is relaxed so that all four links still appear on eligible paragraphs.
-            // Labels are pre-shuffled in sourcesForAnswer, so order and placement
-            // are random.
+            // Primary rule: spread the links out so that no two sources share a
+            // paragraph. Only when there are fewer eligible paragraphs than links
+            // (so doubling up is unavoidable) do the fallbacks below allow a
+            // second link in a paragraph — and even then they avoid putting two of
+            // the same source together where possible. Labels are pre-shuffled in
+            // sourcesForAnswer, so order and placement are random.
             if (totalEligible > 0) {
                 const MAX_PER_BLOCK = 2;
                 for (let b = 0; b < BUBBLE_COUNT; b++) {
                     const label = sourcesForAnswer[b];
+                    // Primary: only paragraphs that have no link yet, so every
+                    // source lands on its own paragraph.
                     let available = [];
                     for (let i = 0; i < totalEligible; i++) {
                         const assigned = bubbleAssignments[i] || [];
-                        if (assigned.length >= MAX_PER_BLOCK) continue;
-                        if (label === 'Boston Leader' && assigned.indexOf('Boston Leader') !== -1) continue;
-                        available.push(i);
+                        if (assigned.length === 0) available.push(i);
                     }
-                    // Fallback 1: keep the per-paragraph cap but relax the
-                    // no-two-Boston-Leader rule (only reachable with very few blocks).
+                    // Fallback 1: every eligible paragraph already has a link, so
+                    // doubling up is now necessary. Allow a second link per
+                    // paragraph (up to MAX_PER_BLOCK) but avoid two of the same
+                    // source in one paragraph.
+                    if (available.length === 0) {
+                        for (let i = 0; i < totalEligible; i++) {
+                            const assigned = bubbleAssignments[i] || [];
+                            if (assigned.length >= MAX_PER_BLOCK) continue;
+                            if (assigned.indexOf(label) !== -1) continue;
+                            available.push(i);
+                        }
+                    }
+                    // Fallback 2: relax the no-duplicate-source rule too.
                     if (available.length === 0) {
                         for (let i = 0; i < totalEligible; i++) {
                             if (!bubbleAssignments[i] || bubbleAssignments[i].length < MAX_PER_BLOCK) {
@@ -343,7 +390,7 @@
                             }
                         }
                     }
-                    // Fallback 2: every block is full — allow any block.
+                    // Fallback 3: every block is full — allow any block.
                     if (available.length === 0) {
                         for (let i = 0; i < totalEligible; i++) available.push(i);
                     }
@@ -540,7 +587,9 @@
             messageInput.value = '';
             autoResize();
 
-            const matched = RESPONSE_MAP.get(message.toLowerCase().trim());
+            let matched = RESPONSE_MAP.get(normalizePrompt(message));
+            if (!matched) matched = RESPONSE_MAP_COLLAPSED.get(collapseKey(message));
+            if (DEBUG) debugLog(message, matched);
             const content = createAssistantShell();
 
             if (window.hasReceivedScriptedResponse) {
@@ -573,6 +622,27 @@
             ws.innerHTML = '<h1 class="welcome-title">What can I help with?</h1>';
             chatContainer.appendChild(ws);
         });
+
+        if (DEBUG) {
+            const panel = document.createElement('pre');
+            panel.id = 'debugPanel';
+            panel.style.cssText = 'position:fixed;top:8px;right:8px;max-width:340px;max-height:45vh;overflow:auto;background:#111;color:#0f0;font:11px/1.4 monospace;padding:8px;border-radius:6px;z-index:2000;white-space:pre-wrap;';
+            panel.textContent = '[DEBUG] build: 4-topic sourcelink\ncondition=' + CONDITION + '  participantId=' + PARTICIPANT_ID + '\ntopics loaded:\n' + SCRIPTED_RESPONSES.map(r => '  ' + r.topic + ' = "' + r.question + '"').join('\n');
+            document.body.appendChild(panel);
+        }
+
+        function debugLog(received, matched) {
+            const panel = document.getElementById('debugPanel');
+            if (!panel) return;
+            const norm = normalizePrompt(received);
+            const codes = Array.from(norm).map(c => c.charCodeAt(0)).join(',');
+            panel.textContent += '\n\n[submit] matched=' + (matched ? matched.topic : 'NONE')
+                + '\nraw=' + JSON.stringify(received)
+                + '\nnorm=' + JSON.stringify(norm)
+                + '\ncollapsed=' + JSON.stringify(collapseKey(received))
+                + '\nnorm char codes=' + codes;
+            panel.scrollTop = panel.scrollHeight;
+        }
 
         updateSendButton();
 
